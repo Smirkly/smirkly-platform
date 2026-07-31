@@ -1,0 +1,49 @@
+groups:
+  - name: smirkly-auth
+    rules:
+      - alert: SmirklyAuthUnavailable
+        expr: up{job="smirkly-auth"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: smirkly-auth
+        annotations:
+          summary: Smirkly Auth metrics endpoint is unavailable
+          description: Prometheus has failed to scrape Smirkly Auth for more than one minute.
+
+      - alert: SmirklyAuthOutboxDeadLetter
+        expr: increase(auth_email_outbox_deliveries_total{job="smirkly-auth", result="dead"}[5m]) > 0
+        labels:
+          severity: critical
+          service: smirkly-auth
+        annotations:
+          summary: Email delivery reached the dead-letter state
+          description: At least one auth email exhausted its delivery attempts in the last five minutes.
+
+      - alert: SmirklyAuthOutboxPersistenceError
+        expr: increase(auth_email_outbox_errors_total{job="smirkly-auth"}[5m]) > 0
+        labels:
+          severity: warning
+          service: smirkly-auth
+        annotations:
+          summary: Email outbox persistence operation failed
+          description: Claiming or persisting an email outbox job failed in the last five minutes.
+
+      - alert: SmirklyAuthOutboxLeaseLost
+        expr: increase(auth_email_outbox_deliveries_total{job="smirkly-auth", result="lease_lost"}[10m]) > 2
+        labels:
+          severity: warning
+          service: smirkly-auth
+        annotations:
+          summary: Email outbox workers are losing leases
+          description: More than two email jobs lost their worker lease in the last ten minutes.
+
+      - alert: SmirklyAuthOutboxSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(auth_email_outbox_processing_duration_seconds_bucket{job="smirkly-auth"}[10m]))) > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: smirkly-auth
+        annotations:
+          summary: Email outbox processing is slow
+          description: The p95 email processing duration has exceeded five seconds for ten minutes.
