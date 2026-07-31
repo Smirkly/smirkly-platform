@@ -1,0 +1,136 @@
+name: smirkly
+
+x-auth-build: &auth-build
+  context: ${SMIRKLY_AUTH_CONTEXT:-../smirkly-auth}
+  dockerfile: Dockerfile
+  args:
+    USERVER_IMAGE: ghcr.io/userver-framework/ubuntu-24.04-userver:v3.0@sha256:3477357e5d6b874d69676b38d084dc153097c9d7a85f09fb5b059427dcfee990
+    MIGRATE_IMAGE: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
+
+services:
+  smirkly-postgres:
+    image: postgres:16.14@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smirkly_auth
+      POSTGRES_USER: smirkly_auth
+      POSTGRES_PASSWORD: smirkly_auth
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:-55432}:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  smirkly-auth-migrate:
+    build:
+      <<: *auth-build
+      target: migrate
+    image: smirkly-auth-migrate:local
+    depends_on:
+      smirkly-postgres:
+        condition: service_healthy
+    command:
+      - -path=/migrations
+      - -database=postgres://smirkly_auth:smirkly_auth@smirkly-postgres:5432/smirkly_auth?sslmode=disable
+      - up
+    networks:
+      - backend
+
+  mailpit:
+    image: axllent/mailpit:v1.30.6@sha256:7f33095f80e901f6ad08028f06ca284aa58fe84942be5496008d041d3b9f4d4d
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - 127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025
+    networks:
+      - backend
+
+  smirkly-auth:
+    platform: ${SMIRKLY_AUTH_PLATFORM:-linux/amd64}
+    build:
+      <<: *auth-build
+      target: prod
+    image: smirkly-auth:local
+    restart: unless-stopped
+    depends_on:
+      smirkly-auth-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    environment:
+      USERVER_ENABLE_STACK_USAGE_MONITOR: "0"
+    ports:
+      - 127.0.0.1:${SMIRKLY_AUTH_PORT:-18080}:8080
+    expose:
+      - "8081"
+    volumes:
+      - ./.local/auth/config_vars.yaml:/app/configs/config_vars.yaml:ro
+      - ./.local/auth/secrets:/app/configs/secrets:ro
+      - auth-dynamic-config:/var/cache/smirkly-auth
+    networks:
+      - backend
+      - observability
+
+  prometheus:
+    profiles:
+      - observability
+    image: prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69
+    restart: unless-stopped
+    depends_on:
+      smirkly-auth:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT:-9090}:9090
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks:
+      - observability
+
+  grafana:
+    profiles:
+      - observability
+    image: grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:-3000}:3000
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - observability
+
+networks:
+  backend:
+  observability:
+
+volumes:
+  postgres-data:
+  auth-dynamic-config:
+  prometheus-data:
+  grafana-data:

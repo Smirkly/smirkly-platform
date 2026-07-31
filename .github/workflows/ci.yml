@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/init-local.sh
+          shellcheck scripts/init-local.sh
+
+      - name: Validate Compose configuration
+        run: docker compose --env-file .env.example --profile observability config --quiet
+
+      - name: Validate Grafana dashboards
+        run: jq empty observability/grafana/dashboards/*.json
+
+      - name: Validate Prometheus configuration and rules
+        run: |
+          docker run --rm --entrypoint promtool \
+            --volume "$PWD/observability/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69 \
+            check config /etc/prometheus/prometheus.yml
