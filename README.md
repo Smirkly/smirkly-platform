@@ -37,15 +37,15 @@ The first build compiles `smirkly-auth` and can take several minutes. The stack 
 
 | Component | URL |
 |---|---|
-| Auth API | http://127.0.0.1:8080 |
+| Auth API | http://127.0.0.1:18080 |
 | Mailpit | http://127.0.0.1:8025 |
 | Prometheus | http://127.0.0.1:9090 |
 | Grafana | http://127.0.0.1:3000 |
-| PostgreSQL | `127.0.0.1:5432` |
+| PostgreSQL | `127.0.0.1:55432` |
 
 Grafana is provisioned with Prometheus and the **Smirkly Auth** dashboard. Anonymous access is read-only and intended only for this loopback-bound local stack.
 
-Stop any standalone auth process or service Compose stack first if it already occupies ports `5432` or `8080`. The auth devcontainer remains the canonical environment for service development and tests; this repository is the integration environment for running several services together.
+The nonstandard host ports deliberately avoid the `5432` and `8080` defaults commonly used by the auth devcontainer and a CLion-run service. Internal service addresses remain `smirkly-postgres:5432` and `smirkly-auth:8080`. Override the host ports in `.env` when needed.
 
 Use `make up` when observability is not needed. Run `make down` to stop containers while preserving data, or `make clean` to also delete local volumes and generated development secrets.
 
