@@ -16,6 +16,8 @@ smirkly/
 
 The default `SMIRKLY_AUTH_CONTEXT=../smirkly-auth` assumes this layout. Override it in `.env` when needed.
 
+The pinned userver v3.0 image is currently `amd64`-only, so the auth container explicitly uses `linux/amd64`. Docker Desktop runs it through emulation on Apple Silicon; builds there are expected to be slower.
+
 ## Prerequisites
 
 - Docker Desktop with Compose v2

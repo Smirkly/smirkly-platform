@@ -56,6 +56,7 @@ services:
       - backend
 
   smirkly-auth:
+    platform: ${SMIRKLY_AUTH_PLATFORM:-linux/amd64}
     build:
       <<: *auth-build
       target: prod
