@@ -5,8 +5,8 @@ SHELL := /usr/bin/env bash
 
 help:
 	@printf '%s\n' \
-	  'make init              Generate ignored local auth config and keys' \
-	  'make up                Start PostgreSQL, Mailpit, and auth' \
+	  'make init              Generate ignored local service config and keys' \
+	  'make up                Start auth, chat, and their dependencies' \
 	  'make up-observability  Start the complete stack' \
 	  'make down              Stop the stack and preserve volumes' \
 	  'make clean             Stop the stack and delete local data' \
