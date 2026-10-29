@@ -4,17 +4,21 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 local_dir="${root_dir}/.local/auth"
 secrets_dir="${local_dir}/secrets"
+openbao_seed_dir="${root_dir}/.local/openbao/seeds"
 config_path="${local_dir}/config_vars.yaml"
 template_path="${root_dir}/services/auth/config_vars.local.example.yaml"
 private_key="${secrets_dir}/auth_jwt_private.pem"
 public_key="${secrets_dir}/auth_jwt_public.pem"
+openbao_postgres_password="${openbao_seed_dir}/postgres_password"
+openbao_smtp_password="${openbao_seed_dir}/smtp_password"
+openbao_refresh_token_pepper="${openbao_seed_dir}/refresh_token_pepper"
 
 command -v openssl >/dev/null 2>&1 || {
   printf 'openssl is required to generate local JWT keys\n' >&2
   exit 1
 }
 
-install -d -m 0700 "${secrets_dir}"
+install -d -m 0700 "${secrets_dir}" "${openbao_seed_dir}"
 
 if [[ ! -f "${config_path}" ]]; then
   install -m 0600 "${template_path}" "${config_path}"
@@ -31,4 +35,22 @@ if [[ ! -f "${public_key}" ]]; then
   openssl pkey -in "${private_key}" -pubout -out "${public_key}"
   chmod 0644 "${public_key}"
   printf 'created %s\n' "${public_key}"
+fi
+
+if [[ ! -f "${openbao_postgres_password}" ]]; then
+  printf '%s\n' 'smirkly_auth' >"${openbao_postgres_password}"
+  chmod 0600 "${openbao_postgres_password}"
+  printf 'created %s\n' "${openbao_postgres_password}"
+fi
+
+if [[ ! -f "${openbao_smtp_password}" ]]; then
+  printf '%s\n' 'smirkly-local' >"${openbao_smtp_password}"
+  chmod 0600 "${openbao_smtp_password}"
+  printf 'created %s\n' "${openbao_smtp_password}"
+fi
+
+if [[ ! -f "${openbao_refresh_token_pepper}" ]]; then
+  openssl rand -hex 32 >"${openbao_refresh_token_pepper}"
+  chmod 0600 "${openbao_refresh_token_pepper}"
+  printf 'created %s\n' "${openbao_refresh_token_pepper}"
 fi

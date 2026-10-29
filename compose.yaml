@@ -51,7 +51,16 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports:
+      - 127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025
       - 127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025
+    healthcheck:
+      test:
+        - CMD
+        - /mailpit
+        - readyz
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - backend
 
@@ -66,7 +75,7 @@ services:
       smirkly-auth-migrate:
         condition: service_completed_successfully
       mailpit:
-        condition: service_started
+        condition: service_healthy
     environment:
       USERVER_ENABLE_STACK_USAGE_MONITOR: "0"
     ports:
@@ -86,15 +95,22 @@ services:
       - observability
     image: prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69
     restart: unless-stopped
-    depends_on:
-      smirkly-auth:
-        condition: service_started
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
     ports:
       - 127.0.0.1:${PROMETHEUS_PORT:-9090}:9090
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - --quiet
+        - http://127.0.0.1:9090/-/ready
+      interval: 5s
+      timeout: 3s
+      retries: 20
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/rules:/etc/prometheus/rules:ro
@@ -109,7 +125,7 @@ services:
     restart: unless-stopped
     depends_on:
       prometheus:
-        condition: service_started
+        condition: service_healthy
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
@@ -118,6 +134,13 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - 127.0.0.1:${GRAFANA_PORT:-3000}:3000
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --spider --quiet http://127.0.0.1:3000/api/health
+      interval: 5s
+      timeout: 3s
+      retries: 20
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -125,12 +148,115 @@ services:
     networks:
       - observability
 
+  openbao:
+    profiles:
+      - secrets
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    cap_add:
+      - IPC_LOCK
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+      BAO_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      BAO_DEV_ROOT_TOKEN_ID: ${OPENBAO_DEV_ROOT_TOKEN:-smirkly-local-dev-root}
+    command:
+      - server
+      - -dev
+    ports:
+      - 127.0.0.1:${OPENBAO_PORT:-8200}:8200
+    healthcheck:
+      test:
+        - CMD
+        - bao
+        - status
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - secrets
+
+  openbao-bootstrap:
+    profiles:
+      - secrets
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    depends_on:
+      openbao:
+        condition: service_healthy
+      openbao-volume-init:
+        condition: service_completed_successfully
+    environment:
+      BAO_ADDR: http://openbao:8200
+      BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN:-smirkly-local-dev-root}
+    entrypoint:
+      - /bin/sh
+      - /openbao/bootstrap/bootstrap.sh
+    volumes:
+      - ./openbao/bootstrap:/openbao/bootstrap:ro
+      - ./openbao/policies:/openbao/policies:ro
+      - ./.local/openbao/seeds:/openbao/seeds:ro
+      - ./.local/auth/secrets:/openbao/auth-secrets:ro
+      - openbao-auth-approle:/openbao/approle
+    networks:
+      - secrets
+
+  openbao-volume-init:
+    profiles:
+      - secrets
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    user: "0:0"
+    network_mode: none
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        rm -f /openbao/approle/* /run/secrets/smirkly-auth/*
+        chown -R 100:1000 /openbao/approle /run/secrets/smirkly-auth
+        chmod 0700 /openbao/approle /run/secrets/smirkly-auth
+    volumes:
+      - openbao-auth-approle:/openbao/approle
+      - openbao-auth-secrets:/run/secrets/smirkly-auth
+
+  openbao-agent-auth:
+    profiles:
+      - secrets
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      BAO_ADDR: http://openbao:8200
+    entrypoint:
+      - bao
+      - agent
+      - -config=/openbao/agent/smirkly-auth.hcl
+    volumes:
+      - ./openbao/agent:/openbao/agent:ro
+      - ./openbao/templates:/openbao/templates:ro
+      - openbao-auth-approle:/openbao/approle:ro
+      - openbao-auth-secrets:/run/secrets/smirkly-auth
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -s /run/secrets/smirkly-auth/postgres_password &&
+          test -s /run/secrets/smirkly-auth/jwt_private_key.pem &&
+          test -s /run/secrets/smirkly-auth/smtp_password &&
+          test -s /run/secrets/smirkly-auth/refresh_token_pepper
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - secrets
+
 networks:
   backend:
   observability:
+  secrets:
 
 volumes:
   postgres-data:
   auth-dynamic-config:
   prometheus-data:
   grafana-data:
+  openbao-auth-approle:
+  openbao-auth-secrets:
