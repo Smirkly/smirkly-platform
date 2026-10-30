@@ -2,11 +2,14 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-local_dir="${root_dir}/.local/auth"
-secrets_dir="${local_dir}/secrets"
+auth_local_dir="${root_dir}/.local/auth"
+chat_local_dir="${root_dir}/.local/chat"
+secrets_dir="${auth_local_dir}/secrets"
 openbao_seed_dir="${root_dir}/.local/openbao/seeds"
-config_path="${local_dir}/config_vars.yaml"
+config_path="${auth_local_dir}/config_vars.yaml"
 template_path="${root_dir}/services/auth/config_vars.local.example.yaml"
+chat_config_path="${chat_local_dir}/config_vars.yaml"
+chat_template_path="${root_dir}/services/chat/config_vars.local.example.yaml"
 private_key="${secrets_dir}/auth_jwt_private.pem"
 public_key="${secrets_dir}/auth_jwt_public.pem"
 openbao_postgres_password="${openbao_seed_dir}/postgres_password"
@@ -18,11 +21,17 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-install -d -m 0700 "${secrets_dir}" "${openbao_seed_dir}"
+install -d -m 0700 "${secrets_dir}" "${chat_local_dir}" \
+  "${openbao_seed_dir}"
 
 if [[ ! -f "${config_path}" ]]; then
   install -m 0600 "${template_path}" "${config_path}"
   printf 'created %s\n' "${config_path}"
+fi
+
+if [[ ! -f "${chat_config_path}" ]]; then
+  install -m 0600 "${chat_template_path}" "${chat_config_path}"
+  printf 'created %s\n' "${chat_config_path}"
 fi
 
 if [[ ! -f "${private_key}" ]]; then

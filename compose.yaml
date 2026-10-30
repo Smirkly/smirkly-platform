@@ -7,6 +7,13 @@ x-auth-build: &auth-build
     USERVER_IMAGE: ghcr.io/userver-framework/ubuntu-24.04-userver:v3.0@sha256:3477357e5d6b874d69676b38d084dc153097c9d7a85f09fb5b059427dcfee990
     MIGRATE_IMAGE: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
 
+x-chat-build: &chat-build
+  context: ${SMIRKLY_CHAT_CONTEXT:-../smirkly-chat}
+  dockerfile: Dockerfile
+  args:
+    USERVER_IMAGE: ghcr.io/userver-framework/ubuntu-24.04-userver:v3.0@sha256:3477357e5d6b874d69676b38d084dc153097c9d7a85f09fb5b059427dcfee990
+    MIGRATE_IMAGE: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
+
 services:
   smirkly-postgres:
     image: postgres:16.14@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
@@ -86,6 +93,90 @@ services:
       - ./.local/auth/config_vars.yaml:/app/configs/config_vars.yaml:ro
       - ./.local/auth/secrets:/app/configs/secrets:ro
       - auth-dynamic-config:/var/cache/smirkly-auth
+    networks:
+      - backend
+      - observability
+
+  smirkly-chat-postgres:
+    image: postgres:16.14@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smirkly_chat
+      POSTGRES_USER: smirkly_chat
+      POSTGRES_PASSWORD: smirkly_chat
+    ports:
+      - 127.0.0.1:${CHAT_POSTGRES_PORT:-55433}:5432
+    volumes:
+      - chat-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  smirkly-chat-migrate:
+    build:
+      <<: *chat-build
+      target: migrate
+    image: smirkly-chat-migrate:local
+    depends_on:
+      smirkly-chat-postgres:
+        condition: service_healthy
+    command:
+      - -path=/migrations
+      - -database=postgres://smirkly_chat:smirkly_chat@smirkly-chat-postgres:5432/smirkly_chat?sslmode=disable
+      - up
+    networks:
+      - backend
+
+  smirkly-chat-redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    volumes:
+      - chat-redis-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  smirkly-chat:
+    platform: ${SMIRKLY_CHAT_PLATFORM:-linux/amd64}
+    build:
+      <<: *chat-build
+      target: prod
+    image: smirkly-chat:local
+    restart: unless-stopped
+    depends_on:
+      smirkly-auth:
+        condition: service_started
+      smirkly-chat-migrate:
+        condition: service_completed_successfully
+      smirkly-chat-redis:
+        condition: service_healthy
+    environment:
+      USERVER_ENABLE_STACK_USAGE_MONITOR: "0"
+      SECDIST_CONFIG: >-
+        {"redis_settings":{"chat-redis":{"password":"","database_index":0,"sentinels":[{"host":"smirkly-chat-redis","port":6379}],"shards":[{"name":"smirkly-chat-redis"}]}},"kafka_settings":{"kafka-producer-chat":{"brokers":"smirkly-chat-kafka:9092","username":"","password":""}}}
+    ports:
+      - 127.0.0.1:${SMIRKLY_CHAT_PORT:-18081}:8080
+    expose:
+      - "8082"
+    volumes:
+      - ./.local/chat/config_vars.yaml:/app/configs/config_vars.yaml:ro
     networks:
       - backend
       - observability
@@ -256,6 +347,8 @@ networks:
 volumes:
   postgres-data:
   auth-dynamic-config:
+  chat-postgres-data:
+  chat-redis-data:
   prometheus-data:
   grafana-data:
   openbao-auth-approle:

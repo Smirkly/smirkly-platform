@@ -6,8 +6,8 @@ SHELL := /usr/bin/env bash
 
 help:
 	@printf '%s\n' \
-	  'make init              Generate ignored local auth config, keys, and secret seeds' \
-	  'make up                Start PostgreSQL, Mailpit, and auth' \
+	  'make init              Generate ignored local service config, keys, and secret seeds' \
+	  'make up                Start auth, chat, and their dependencies' \
 	  'make up-foundation     Start Mailpit, observability, and local OpenBao' \
 	  'make up-observability  Start the complete application and observability stack' \
 	  'make up-secrets        Recreate local OpenBao, bootstrap, and Agent' \
