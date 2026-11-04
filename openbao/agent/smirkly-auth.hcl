@@ -36,3 +36,9 @@ template {
   destination = "/run/secrets/smirkly-auth/refresh_token_pepper"
   perms       = "0400"
 }
+
+template {
+  source      = "/openbao/templates/verification_code_pepper.ctmpl"
+  destination = "/run/secrets/smirkly-auth/verification_code_pepper"
+  perms       = "0400"
+}

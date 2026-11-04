@@ -56,6 +56,7 @@ The local OpenBao bootstrap enables KV v2 at `secret/`, creates the
 | `/run/secrets/smirkly-auth/jwt_private_key.pem` | JWT signing key |
 | `/run/secrets/smirkly-auth/smtp_password` | SMTP credential |
 | `/run/secrets/smirkly-auth/refresh_token_pepper` | refresh-token hashing pepper |
+| `/run/secrets/smirkly-auth/verification_code_pepper` | verification-code hashing pepper |
 
 Application containers do not mount these files yet. The auth integration must
 add explicit file-based configuration before replacing its existing local

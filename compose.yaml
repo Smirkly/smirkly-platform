@@ -332,7 +332,8 @@ services:
           test -s /run/secrets/smirkly-auth/postgres_password &&
           test -s /run/secrets/smirkly-auth/jwt_private_key.pem &&
           test -s /run/secrets/smirkly-auth/smtp_password &&
-          test -s /run/secrets/smirkly-auth/refresh_token_pepper
+          test -s /run/secrets/smirkly-auth/refresh_token_pepper &&
+          test -s /run/secrets/smirkly-auth/verification_code_pepper
       interval: 3s
       timeout: 3s
       retries: 20
