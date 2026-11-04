@@ -23,6 +23,7 @@ bao kv put secret/smirkly-auth \
   postgres_password="$(cat /openbao/seeds/postgres_password)" \
   smtp_password="$(cat /openbao/seeds/smtp_password)" \
   refresh_token_pepper="$(cat /openbao/seeds/refresh_token_pepper)" \
+  verification_code_pepper="$(cat /openbao/seeds/verification_code_pepper)" \
   jwt_private_key="$(cat /openbao/auth-secrets/auth_jwt_private.pem)"
 
 rm -f /openbao/approle/role-id /openbao/approle/secret-id

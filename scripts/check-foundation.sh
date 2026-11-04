@@ -28,7 +28,8 @@ docker compose --profile secrets exec -T openbao-agent-auth sh -ec '
     /run/secrets/smirkly-auth/postgres_password \
     /run/secrets/smirkly-auth/jwt_private_key.pem \
     /run/secrets/smirkly-auth/smtp_password \
-    /run/secrets/smirkly-auth/refresh_token_pepper; do
+    /run/secrets/smirkly-auth/refresh_token_pepper \
+    /run/secrets/smirkly-auth/verification_code_pepper; do
     test -s "${path}"
   done
 '

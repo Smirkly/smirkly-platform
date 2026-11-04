@@ -15,6 +15,7 @@ public_key="${secrets_dir}/auth_jwt_public.pem"
 openbao_postgres_password="${openbao_seed_dir}/postgres_password"
 openbao_smtp_password="${openbao_seed_dir}/smtp_password"
 openbao_refresh_token_pepper="${openbao_seed_dir}/refresh_token_pepper"
+openbao_verification_code_pepper="${openbao_seed_dir}/verification_code_pepper"
 
 command -v openssl >/dev/null 2>&1 || {
   printf 'openssl is required to generate local JWT keys\n' >&2
@@ -27,6 +28,13 @@ install -d -m 0700 "${secrets_dir}" "${chat_local_dir}" \
 if [[ ! -f "${config_path}" ]]; then
   install -m 0600 "${template_path}" "${config_path}"
   printf 'created %s\n' "${config_path}"
+fi
+
+if ! grep -q '^AUTH_VERIFICATION_CODE_PEPPER:' "${config_path}"; then
+  printf '%s\n' \
+    'AUTH_VERIFICATION_CODE_PEPPER: local-development-verification-code-pepper-change-before-deployment' \
+    >>"${config_path}"
+  printf 'updated %s with AUTH_VERIFICATION_CODE_PEPPER\n' "${config_path}"
 fi
 
 if [[ ! -f "${chat_config_path}" ]]; then
@@ -62,4 +70,10 @@ if [[ ! -f "${openbao_refresh_token_pepper}" ]]; then
   openssl rand -hex 32 >"${openbao_refresh_token_pepper}"
   chmod 0600 "${openbao_refresh_token_pepper}"
   printf 'created %s\n' "${openbao_refresh_token_pepper}"
+fi
+
+if [[ ! -f "${openbao_verification_code_pepper}" ]]; then
+  openssl rand -hex 32 >"${openbao_verification_code_pepper}"
+  chmod 0600 "${openbao_verification_code_pepper}"
+  printf 'created %s\n' "${openbao_verification_code_pepper}"
 fi
