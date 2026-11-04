@@ -55,6 +55,37 @@ The nonstandard host ports deliberately avoid defaults commonly used by the serv
 
 Use `make up` when observability is not needed. Run `make down` to stop containers while preserving data, or `make clean` to also delete local volumes and generated development secrets.
 
+## Auth lifecycle E2E
+
+The local auth E2E test exercises the public API and real SMTP delivery through
+Mailpit. It covers sign-up, email verification, sign-in, refresh rotation,
+`/me`, session listing, password reset, and logout without reading PostgreSQL
+directly.
+
+```bash
+make test-auth-e2e
+```
+
+The command initializes local keys and config, builds and starts only auth and
+its dependencies, waits for the API and email outbox worker, then runs the
+test. Mailpit captures messages sent to the test's unique generated address;
+no real mailbox or SMTP credential is required. Inspect captured messages at
+http://127.0.0.1:8025.
+
+To start the same stack without running the test:
+
+```bash
+make up-auth-e2e
+```
+
+Override endpoints when the default ports are unavailable:
+
+```bash
+make test-auth-e2e \
+  SMIRKLY_AUTH_PORT=28080 \
+  MAILPIT_HTTP_PORT=28025
+```
+
 ## Infrastructure foundation
 
 The infrastructure foundation can run without building or starting auth or chat:
